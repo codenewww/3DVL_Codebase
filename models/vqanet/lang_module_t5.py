@@ -10,6 +10,7 @@ from transformers import AutoTokenizer, AutoModel, T5ForConditionalGeneration
 from .modified_t5 import T5Model
 
 from lib.configs.config_vqa import CONF
+#对CONF配置对象赋值方式：手动。配置文件加载。命令行参数传递argparse。代码中动态赋予（条件语句）
 
 class LangModule(nn.Module):  # num_text_classes: question id types
     def __init__(self, num_text_classes=100, answer_class_number=2000, model_name='t5', pretrained_path='/mnt/lustre/zhaolichen/codes/3dvl/t5_base',
@@ -25,6 +26,8 @@ class LangModule(nn.Module):  # num_text_classes: question id types
         else:
             raise NotImplementedError(model_name)
 
+
+        #nn.Linear线性层（全连接层）作用是特征映射，两个参数含义分别是输入特征和输出特征             
         # language classifier
         if use_lang_classifier:
             self.query_cls = nn.Linear(hidden_size, num_text_classes)
@@ -35,6 +38,7 @@ class LangModule(nn.Module):  # num_text_classes: question id types
         """
         encode the input descriptions
         """
+        #第二维：每个序列token数；第三维：描述或问题的最大长度（用于可变长度序列）
         word_embs = data_dict["vqa_question_embedding"]  # B * 32 * MAX_DES_LEN * LEN(300)
         lang_len = data_dict["vqa_question_embedding_length"]
         device = word_embs.device
@@ -42,6 +46,7 @@ class LangModule(nn.Module):  # num_text_classes: question id types
         # todo: there are xx objects in the scene (more info)
         query, answer = data_dict['vqa_question'], data_dict['vqa_answer']
         batch_size, lang_num_max = len(query), len(query[0])
+        #将嵌套列表展开成扁平化一维列表
         query = [x for y in query for x in y]
         answer = [x for y in answer for x in y]
 
@@ -51,6 +56,7 @@ class LangModule(nn.Module):  # num_text_classes: question id types
         data_dict['tokens'] = tokens
         data_dict['t5_encoder_outputs'] = encoder_outputs
         data_dict['vqa_question_attention_mask'] = None
+        #存储了 VQA 问题的语言特征，这是从编码器的最后一层隐藏状态中提取的
         data_dict['vqa_question_lang_fea'] = hidden_state
         return data_dict
 
@@ -72,12 +78,15 @@ class LangModule(nn.Module):  # num_text_classes: question id types
         # lang_feat_mask[query_tokens == self.tokenzier.tokenizer.pad_token_id] = True
 
         loss, logits, hidden_state = outputs.loss, outputs.logits, outputs.decoder_hidden_states[-1]
+        #选择每个位置上概率最大的类别，生成一个包含类别索引的列表的列表
         prediction_answer = [[x for x in y] for y in logits.argmax(-1)]
+        #使用模型的 tokenizer 对每个类别索引进行解码，将其转换为对应的字符串表示。
         prediction_answer = [self.model.tokenizer.decode(x) for x in prediction_answer]  # string
 
         # import ipdb; ipdb.set_trace()
         # cap_emb = hidden_state[:, 0, :]
         # store the encoded language features
+        #存储整个问题的编码语言特征，并提取每个样本中最后一个时间步的特征，并以三维张量的形式存储在 last_feat 中
         data_dict["vqa_question_lang_decoded_fea"] = hidden_state  # B, hidden_size
         last_feat = hidden_state[:, 0, :].reshape(batch_size, lang_num_max, -1)
 
