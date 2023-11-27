@@ -7,6 +7,8 @@ import copy
 
 from models.transformer.attention import MultiHeadAttention
 from transformers import AutoTokenizer, AutoModel, T5ForConditionalGeneration
+#T5（Text-To-Text Transfer Transformer）是一种基于Transformer架构的预训练语言模型，
+#T5的设计思想是将所有的NLP（自然语言处理）任务都视为文本到文本的问题
 from .modified_t5 import T5Model
 
 from lib.configs.config_vqa import CONF
