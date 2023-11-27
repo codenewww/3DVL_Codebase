@@ -17,6 +17,7 @@ class CrossAttnModule(nn.Module):  # cross-self-cross-self-cross...; the depth
         for i in range(depth):
             self.A2B_Attn.append(MultiHeadAttention(d_model=hidden_size, d_k=hidden_size // head, d_v=hidden_size // head, h=head))
             self.B2A_Attn.append(MultiHeadAttention(d_model=hidden_size, d_k=hidden_size // head, d_v=hidden_size // head, h=head))
+       #最后一层 A2A 和 B2B 注意力机制设置为恒等映射（Identity）
         self.A2A_Attn.append(nn.Identity())
         self.B2B_Attn.append(nn.Identity())
         for i in range(depth-1):
@@ -28,9 +29,11 @@ class CrossAttnModule(nn.Module):  # cross-self-cross-self-cross...; the depth
             depth = [i for i in range(self.depth)]
         for i in depth:
             # queries, keys, values, attention_mask=None, attention_weights=None, way='mul'
+           #非第一层
             if i != 0:
                 TMP_A_feat = self.A2A_Attn[i](A_feat, A_feat, A_feat, A_mask, A2A_weight, way=attention_weight_way)
                 TMP_B_feat = self.B2B_Attn[i](B_feat, B_feat, B_feat, B_mask, B2B_weight, way=attention_weight_way)
+            #第一层复制输入特征
             else:
                 TMP_A_feat, TMP_B_feat = A_feat, B_feat
             B_feat = self.A2B_Attn[i](B_feat, A_feat, A_feat, A_mask, A2B_weight, way=attention_weight_way)
@@ -59,6 +62,7 @@ class CrossmodalModule(nn.Module):
 
         self.CrossAttention = CrossAttnModule(hidden_size, head, depth=2)
 
+    #处理目标检测和语言特征的模块
     def forward(self, data_dict):
         """
         Args:
@@ -68,6 +72,7 @@ class CrossmodalModule(nn.Module):
             scores: (B,num_proposal,2+3+NH*2+NS*4)
         """
 
+        #从数据词典获取必要输入信息
         objectness_masks = data_dict['objectness_scores'].max(2)[1].float().unsqueeze(2)  # batch_size, num_proposals, 1
 
         dist_weights = data_dict['dist_weights']
@@ -105,6 +110,7 @@ class CrossmodalModule(nn.Module):
         #         else:
         #             feature0[i, obj_mask[:total_len - obj_lens[i]], :] = obj_features[j:j + total_len - obj_lens[i], :]
 
+        #生成目标级别特征
         object_fea = feature0[:, None, :, :].repeat(1, lang_num_max, 1, 1).reshape(batch_size*lang_num_max, num_proposal, -1)
         object_fea = self.object_fc(object_fea)
         lang_fea = data_dict["vqa_question_lang_fea"]
@@ -117,6 +123,7 @@ class CrossmodalModule(nn.Module):
             A_feat = object_fea, B_feat = lang_fea, B_mask=data_dict["vqa_question_attention_mask"],
             A2A_weight = dist_weights, attention_weight_way = data_dict['attention_matrix_way'])
 
+        #匹配层计算相关目标置信度
         related_object_confidence = self.match(updated_object_fea.permute(0,2,1)).permute(0,2,1)  # batch_size, num_proposals
         related_object_confidence = related_object_confidence.reshape(batch_size, lang_num_max, num_proposal, -1)
         data_dict["vqa_pred_related_object_confidence"] = related_object_confidence
