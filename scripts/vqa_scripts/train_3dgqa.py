@@ -117,6 +117,7 @@ def get_model(args):
     return model
 
 
+#获取神经网络模型中所有可训练参数的总数量
 def get_num_params(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     num_params = int(sum([np.prod(p.size()) for p in model_parameters]))
