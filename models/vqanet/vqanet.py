@@ -39,6 +39,7 @@ class VqaNet(nn.Module):
         self.backbone_net = Pointnet2Backbone(input_feature_dim=self.input_feature_dim)
 
         # Hough voting
+       #   它的基本思想是通过对每个点投票的方式，从点云数据中找到具有共同特征的点集合，以便于检测和描述特定的几何形状或结构           
         self.vgen = VotingModule(self.vote_factor, 256)
 
         # Vote aggregation and object proposal
@@ -90,6 +91,7 @@ class VqaNet(nn.Module):
         data_dict["seed_xyz"] = xyz
         data_dict["seed_features"] = features
 
+       #将点投票到特定的几何结构或形状上，生成新的点云坐标 xyz 和特征 features。
         xyz, features = self.vgen(xyz, features)
         features_norm = torch.norm(features, p=2, dim=1)
         features = features.div(features_norm.unsqueeze(1))
