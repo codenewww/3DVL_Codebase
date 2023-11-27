@@ -2,6 +2,7 @@ import os
 import sys
 from easydict import EasyDict
 
+#获取当前脚本所在文件夹的绝对路径（BASE_DIR），并从中推导出项目的根目录（ROOT_DIR）
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(os.path.dirname(BASE_DIR))
 CONF = EasyDict()
