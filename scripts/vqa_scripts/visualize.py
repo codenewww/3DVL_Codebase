@@ -95,6 +95,7 @@ def get_model(args):
 
     return model
 
+#返回给定拆分（训练集、验证集或测试集）中Scannet数据集的场景列表
 def get_scannet_scene_list(split):
     scene_list = sorted([line.rstrip() for line in open(os.path.join(CONF.PATH.SCANNET_META, "scannetv2_{}.txt".format(split)))])
 
@@ -170,6 +171,9 @@ def get_scanvqa(args):
     return scanvqa_train, scanvqa_val, train_scene_list, val_scene_list, all_scene_list
 
 
+#用于将三维点云数据写入PLY（Polygon File Format）文件
+#四个参数：verts（三维点的坐标）、colors（点的颜色，RGB格式）、
+#indices（描述点云中三角面的索引）、output_file（输出的PLY文件路径）
 def write_ply(verts, colors, indices, output_file):
     if colors is None:
         colors = np.zeros_like(verts)
@@ -189,12 +193,15 @@ def write_ply(verts, colors, indices, output_file):
     file.write('element face {:d}\n'.format(len(indices)))
     file.write('property list uchar uint vertex_indices\n')
     file.write('end_header\n')
+    #循环遍历每个顶点，将其坐标和颜色信息写入文件
     for vert, color in zip(verts, colors):
         file.write("{:f} {:f} {:f} {:d} {:d} {:d}\n".format(vert[0], vert[1], vert[2] , int(color[0]*255), int(color[1]*255), int(color[2]*255)))
+    #循环遍历每个三角面的索引，将其写入文件
     for ind in indices:
         file.write('3 {:d} {:d} {:d}\n'.format(ind[0], ind[1], ind[2]))
     file.close()
 
+#创建表示边界框（bounding box）的3D模型，并将其以PLY格式保存到文件
 def write_bbox(bbox, mode, output_file):
     """
     bbox: (cx, cy, cz, lx, ly, lz, r), center and length in three axis, the last is the rotation
@@ -204,6 +211,7 @@ def write_bbox(bbox, mode, output_file):
     def create_cylinder_mesh(radius, p0, p1, stacks=10, slices=10):
         import math
 
+        #计算三维向量长度
         def compute_length_vec3(vec3):
             return math.sqrt(vec3[0]*vec3[0] + vec3[1]*vec3[1] + vec3[2]*vec3[2])
 
@@ -230,8 +238,10 @@ def write_bbox(bbox, mode, output_file):
 
         verts = []
         indices = []
+        #计算两个点之间差异，距离
         diff = (p1 - p0).astype(np.float32)
         height = compute_length_vec3(diff)
+        
         for i in range(stacks+1):
             for i2 in range(slices):
                 theta = i2 * 2.0 * math.pi / slices
@@ -245,6 +255,7 @@ def write_bbox(bbox, mode, output_file):
         transform = np.eye(4)
         va = np.array([0, 0, 1], dtype=np.float32)
         vb = diff
+        #单位化得到方向向量
         vb /= compute_length_vec3(vb)
         axis = np.cross(vb, va)
         angle = np.arccos(np.clip(np.dot(va, vb), -1, 1))
@@ -260,9 +271,12 @@ def write_bbox(bbox, mode, output_file):
         transform[:3,3] += p0
         verts = [np.dot(transform, np.array([v[0], v[1], v[2], 1.0])) for v in verts]
         verts = [np.array([v[0], v[1], v[2]]) / v[3] for v in verts]
+        #返回生成的顶点和索引，表示圆柱体的3D模型
         return verts, indices
 
+    #用于获取包围盒（bounding box）的边
     def get_bbox_edges(bbox_min, bbox_max):
+        #根据最小和最大坐标构建bounding box的8个顶点坐标
         def get_bbox_verts(bbox_min, bbox_max):
             verts = [
                 np.array([bbox_min[0], bbox_min[1], bbox_min[2]]),
@@ -322,6 +336,7 @@ def write_bbox(bbox, mode, output_file):
     colors = []
     corners = get_bbox_corners(bbox)
 
+    #生成带颜色的bounding box模型
     box_min = np.min(corners, axis=0)
     box_max = np.max(corners, axis=0)
     palette = {
@@ -352,6 +367,7 @@ def write_bbox(bbox, mode, output_file):
         return verts, colors, indices  # list
 
 
+#读取包含XYZ坐标和RGB颜色信息的三维模型文件
 def read_mesh(filename):
     """ read XYZ for each vertex.
     """
@@ -368,8 +384,11 @@ def read_mesh(filename):
         vertices[:,4] = plydata['vertex'].data['green']
         vertices[:,5] = plydata['vertex'].data['blue']
 
+    #返回包含顶点信息和面信息的元组。其中，vertices是包含XYZ坐标和RGB颜色信息的数组，
+    #而plydata['face']包含了面的信息。
     return vertices, plydata['face']
 
+#导出三维模型的顶点和面信息为PLY文件
 def export_mesh(vertices, faces):
     new_vertices = []
     for i in range(vertices.shape[0]):
@@ -400,6 +419,7 @@ def export_mesh(vertices, faces):
     
     return PlyData([vertices, faces])
 
+#用于对场景的三维模型进行坐标轴对齐（alignment）
 def align_mesh(scene_id):
     vertices, faces = read_mesh(SCANNET_MESH.format(scene_id, scene_id))
     for line in open(SCANNET_META.format(scene_id, scene_id)).readlines():
@@ -417,6 +437,7 @@ def align_mesh(scene_id):
 
     return mesh
 
+#将一组边界框（bboxes）以一定的颜色和偏移，写入到Ply文件中。
 def write_bboxes(bboxes, output_file):
     verts, colors, indices = [], [], []
     vert_start = 0
@@ -439,6 +460,7 @@ def write_bboxes(bboxes, output_file):
 
 
 def dump_results(args, scanvqa, data, config):
+    #设置结果存储的目录，其中包括模型的输出和可视化结果。
     dump_dir = os.path.join(CONF.PATH.OUTPUT, args.folder, "vis")
     os.makedirs(dump_dir, exist_ok=True)
 
@@ -612,10 +634,12 @@ def dump_results(args, scanvqa, data, config):
             current_pred_obbs = [pred_obb_batch[x, :] for x in pred_ref_idx[y]]
             pred_obbs.append(current_pred_obbs)
 
+        #将ground truth和预测边界框写入ply文件
         write_bboxes(gt_obbs, os.path.join(scene_dump_dir, 'gt_{:.2f}_{}_{}.ply'.format(mAP, question, answer)))
         write_bboxes(pred_obbs, os.path.join(scene_dump_dir, 'pred_{:.2f}_{}_{}.ply'.format(mAP, question, pred_answer)))
         # write_bbox(pred_obb, 1, os.path.join(scene_dump_dir, 'pred_{}_{}_{}_{:.5f}_{:.5f}.ply'.format(object_id, object_name, ann_id, pred_ref_scores_softmax[i, pred_ref_idx], iou)))
 
+#评估模型在验证集上的性能，并可视化评估结果
 def visualize(args):
     # init training dataset
     print("preparing data...")
@@ -633,21 +657,27 @@ def visualize(args):
         "use_3d_nms": True, 
         "nms_iou": 0.25,
         "use_old_type_nms": False, 
-        "cls_nms": True, 
+        "cls_nms": True,   #是否对不同类别的物体应用NMS
         "per_class_proposal": True,
-        "conf_thresh": 0.05,
+        "conf_thresh": 0.05,  #置信度阈值，低于此阈值的物体将被过滤
         "dataset_config": DC
     } if not args.no_nms else None
 
     # evaluate
     print("visualizing...")
+    #遍历数据加载器中的每个批次数据
+    #整个循环的作用是在执行数据加载的同时，在命令行中显示一个进度条，以便实时监视数据加载的进度。
     for data in tqdm(dataloader):
+        #将数据移到gpu上处理
         for key in data:
             if isinstance(data[key], torch.Tensor):
                 data[key] = data[key].cuda()
         # feed
+        #在模型推理过程中，关闭梯度计算，因为在评估阶段我们不需要进行参数更新。
         with torch.no_grad():
+            #使用模型进行推理，获取模型的输出
             data = model(data)
+            #计算模型损失，包括三项损失
             data = get_loss(
                 data_dict=data,
                 config=DC,
@@ -661,6 +691,8 @@ def visualize(args):
             #     reference=False,
             #     post_processing=POST_DICT
             # )
+            #将评估结果进行可视化，并将结果保存在指定的输出文件夹中。
+            #其中，args包含命令行参数，scanvqa_val是用于评估的ScanVQA验证集，data包含模型输出的结果，DC是数据集配置信息。
             dump_results(args, scanvqa_val, data, DC)
 
     print("done!")
@@ -675,7 +707,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch size", default=8)
     parser.add_argument('--num_points', type=int, default=40000, help='Point Number [default: 40000]')
     parser.add_argument('--num_proposals', type=int, default=256, help='Proposal number [default: 256]')
-    parser.add_argument('--num_scenes', type=int, default=-1, help='Number of scenes [default: -1]')
+    parser.add_argument('--num_scenes', type=int, default=-1, help='Number of scenes [default: -1]')#场景的数量，默认为 -1，表示使用所有场景
     parser.add_argument('--no_height', action='store_true', help='Do NOT use height signal in input.')
     parser.add_argument('--no_nms', action='store_true', help='do NOT use non-maximum suppression for post-processing.')
     parser.add_argument('--use_train', action='store_true', help='Use the training set.')
