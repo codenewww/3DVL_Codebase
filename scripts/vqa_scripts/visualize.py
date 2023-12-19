@@ -467,9 +467,11 @@ def dump_results(args, scanvqa, data, config):
     # from inputs
     ids = data['scan_idx'].detach().cpu().numpy()
     point_clouds = data['point_clouds'].cpu().numpy()
+    #返回第一个维度大小
     batch_size = point_clouds.shape[0]
 
     pcl_color = data["pcl_color"].detach().cpu().numpy()
+    #对点云的颜色信息进行缩放、平移和整数化的处理
     if args.use_color:
         pcl_color = (pcl_color * 256 + MEAN_COLOR_RGB).astype(np.int64)
 
